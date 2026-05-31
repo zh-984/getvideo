@@ -235,6 +235,21 @@ function backToHome(){
 // ── 播放 ──
 let proxyMode = 0; // 0=节流模式 1=全代理模式
 
+// ★ Toast 提示函数
+function showToast(msg,duration=3000){
+  let t=document.getElementById('gv-toast');
+  if(!t){t=document.createElement('div');t.id='gv-toast';
+    t.style.cssText='position:fixed;top:12px;left:50%;transform:translateX(-50%);z-index:9999;'+
+    'padding:8px 18px;border-radius:20px;font-size:12px;font-weight:600;color:#fff;'+
+    'background:linear-gradient(135deg,#FF8FA3,#A78BDB);box-shadow:0 4px 16px rgba(0,0,0,.15);'+
+    'pointer-events:none;opacity:0;transition:opacity .3s;max-width:80vw;text-align:center';
+    document.body.appendChild(t);
+  }
+  t.textContent=msg;t.style.opacity='1';
+  clearTimeout(t._tid);
+  t._tid=setTimeout(()=>{t.style.opacity='0';},duration);
+}
+
 async function playEp(idx){
   const ep=eps[idx]; if(!ep?.url)return;
   curEp=idx; proxyMode=0; render(); log('info',`#${idx+1} ${ep.label}`);
@@ -250,23 +265,28 @@ async function playEp(idx){
   initPlayer(playUrl);
 }
 
-// 智能降级：直连失败 → 全代理 → 自动换下一集
-function retryWithFullProxy(){
-  if(proxyMode>=1) return false; // 已经是全代理了
-  proxyMode=1;
-  const ep=eps[curEp]; if(!ep?.url) return false;
-  log('warn','直连失败 → 切换全代理模式');
-  const url=`${API}/api/m3u8?url=${encodeURIComponent(ep.url)}&full=1`;
-  initPlayer(url);
-  return true;
-}
-
-function tryNextEp(){
+// ★ 新的降级策略：先切源，最后才走代理（防爆）
+function fallbackFromError(){
+  // 第 1 优先：切换到下一集（同一个站的不同源）
   if(curEp<eps.length-1){
-    log('warn','当前资源失败，自动播放下一集');
+    showToast('当前资源不可用，正在自动切源…');
+    log('warn','切源 → 下一集');
     playEp(curEp+1);
     return true;
   }
+  // 第 2 优先：全代理模式（仅当所有集都试过才用，且有 50MB 熔断保护）
+  if(proxyMode<1){
+    proxyMode=1;
+    showToast('正在通过安全通道解析…（有流量保护）');
+    log('warn','所有直连失败 → 全代理模式（50MB 熔断）');
+    const ep=eps[curEp]; if(!ep?.url) return false;
+    const url=`${API}/api/m3u8?url=${encodeURIComponent(ep.url)}&full=1`;
+    initPlayer(url);
+    return true;
+  }
+  // 全部失败
+  showToast('所有资源均不可用，请换一部影片');
+  log('err','所有尝试均失败');
   return false;
 }
 
@@ -307,14 +327,12 @@ function initPlayer(source){
           log('err','hls: '+d.details+' fatal='+d.fatal);
           if(!d.fatal)return;
           if(d.type===Hls.ErrorTypes.NETWORK_ERROR){
-            // 网络错误：先试全代理，再试下一集
-            if(retryWithFullProxy()) return;
-            if(tryNextEp()) return;
-            log('err','所有尝试均失败');
+            // ★ 新策略：先切源，最后才走代理（有 50MB 熔断保护）
+            fallbackFromError();
           } else if(d.type===Hls.ErrorTypes.MEDIA_ERROR){
             hls.recoverMediaError();
           } else {
-            if(tryNextEp()) return;
+            fallbackFromError();
           }
         });
         art.hls=hls;

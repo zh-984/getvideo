@@ -358,6 +358,10 @@ app.get('/api/m3u8', async (req, res) => {
 });
 
 // .ts 分片代理（全代理模式用，stream pipe 零缓存）
+// ★ 安全锁：单次请求上限 50MB 或 3 分钟，超限主动断开
+const MAX_PROXY_BYTES = 50 * 1024 * 1024;  // 50MB
+const MAX_PROXY_MS    = 3 * 60 * 1000;     // 3 分钟
+
 app.get('/api/ts', async (req, res) => {
   let targetUrl = req.query.url;
   if (!targetUrl) return res.status(400).json({ error: 'Missing url' });
@@ -374,9 +378,36 @@ app.get('/api/ts', async (req, res) => {
       },
     });
     if (resp.headers['content-type']) res.setHeader('Content-Type', resp.headers['content-type']);
-    if (resp.headers['content-length']) res.setHeader('Content-Length', resp.headers['content-length']);
     res.setHeader('Access-Control-Allow-Origin', '*');
+
+    // ★ 流量熔断：累计字节计数 + 超时强制断开
+    let transferred = 0;
+    const startTime = Date.now();
+    const killTimer = setTimeout(() => {
+      console.warn(`[ts] TIMEOUT 3min, aborting ${targetUrl.slice(0,60)}`);
+      resp.data.destroy();
+      if (!res.writableEnded) res.end();
+    }, MAX_PROXY_MS);
+
+    resp.data.on('data', (chunk) => {
+      transferred += chunk.length;
+      if (transferred > MAX_PROXY_BYTES) {
+        console.warn(`[ts] CAP ${MAX_PROXY_BYTES/1024/1024}MB reached, aborting`);
+        resp.data.destroy();
+        clearTimeout(killTimer);
+        if (!res.writableEnded) res.end();
+      }
+    });
+
     resp.data.pipe(res);
+
+    resp.data.on('end', () => { clearTimeout(killTimer); });
+    resp.data.on('error', () => { clearTimeout(killTimer); });
+
+    req.on('close', () => {
+      resp.data.destroy();
+      clearTimeout(killTimer);
+    });
   } catch (err) {
     res.status(502).json({ error: 'ts fetch failed' });
   }
