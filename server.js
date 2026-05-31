@@ -23,9 +23,46 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 app.use((req, _res, next) => {
-  console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
+  req._rid = Math.random().toString(36).slice(2, 8);
+  console.log(`[${new Date().toISOString()}][${req._rid}] ${req.method} ${req.url}`);
   next();
 });
+
+
+// ──────────────────────────────────────────────
+// 安全中间件
+// ──────────────────────────────────────────────
+
+// 1) 频率限制：每 IP 每秒最多 20 次请求
+const rateLimitMap = new Map();
+setInterval(() => rateLimitMap.clear(), 1000);
+
+app.use((req, res, next) => {
+  const ip = req.ip || req.connection.remoteAddress;
+  const count = (rateLimitMap.get(ip) || 0) + 1;
+  rateLimitMap.set(ip, count);
+  if (count > 20) return res.status(429).json({ error: '请求过于频繁，请稍后再试' });
+  next();
+});
+
+// 2) URL 安全校验函数
+const BLOCKED_HOSTS = new Set(['localhost','127.0.0.1','0.0.0.0','::1','metadata.google.internal']);
+const BLOCKED_EXT = new Set(['.exe','.bat','.cmd','.sh','.ps1','.msi','.dll','.scr','.js','.vbs','.wsf','.hta','.cpl','.reg','.inf']);
+
+function validateUrl(targetUrl) {
+  let parsed;
+  try { parsed = new URL(targetUrl); } catch { return '无效 URL'; }
+  if (!['http:', 'https:'].includes(parsed.protocol)) return '仅允许 http/https';
+  const host = parsed.hostname.toLowerCase();
+  if (BLOCKED_HOSTS.has(host)) return '禁止访问内网地址';
+  if (/^(10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.)/.test(host)) return '禁止访问内网地址';
+  for (const ext of BLOCKED_EXT) {
+    if (parsed.pathname.toLowerCase().endsWith(ext)) return `禁止代理 ${ext} 文件`;
+  }
+  if (/[<>'"]/.test(targetUrl) || /javascript:/i.test(targetUrl)) return 'URL 包含可疑内容';
+  if (targetUrl.length > 2048) return 'URL 过长';
+  return null;
+}
 
 
 // ══════════════════════════════════════
@@ -172,6 +209,8 @@ app.get('/api/parse', async (req, res) => {
   let targetUrl = req.query.url;
   if (!targetUrl) return res.status(400).json({ error: 'Missing url param' });
   while (targetUrl.includes('%25')) targetUrl = decodeURIComponent(targetUrl);
+  const secErr = validateUrl(targetUrl);
+  if (secErr) return res.status(403).json({ error: secErr });
 
   let parsed;
   try { parsed = new URL(targetUrl); } catch { return res.status(400).json({ error: 'Invalid URL' }); }
@@ -272,10 +311,10 @@ app.get('/api/m3u8', async (req, res) => {
   const fullMode = req.query.full === '1';
   if (!targetUrl) return res.status(400).json({ error: 'Missing url' });
 
-  // ★ 修复双重编码：如果 URL 含 %25（双重编码的 %），自动解码一层
-  while (targetUrl.includes('%25')) {
-    targetUrl = decodeURIComponent(targetUrl);
-  }
+  // ★ 修复双重编码
+  while (targetUrl.includes('%25')) { targetUrl = decodeURIComponent(targetUrl); }
+  const secErr = validateUrl(targetUrl);
+  if (secErr) return res.status(403).json({ error: secErr });
 
   try {
     const resp = await axios.get(targetUrl, {
@@ -323,6 +362,8 @@ app.get('/api/ts', async (req, res) => {
   let targetUrl = req.query.url;
   if (!targetUrl) return res.status(400).json({ error: 'Missing url' });
   while (targetUrl.includes('%25')) targetUrl = decodeURIComponent(targetUrl);
+  const secErr = validateUrl(targetUrl);
+  if (secErr) return res.status(403).json({ error: secErr });
 
   try {
     const resp = await axios.get(targetUrl, {
@@ -346,6 +387,8 @@ app.get('/api/key', async (req, res) => {
   let targetUrl = req.query.url;
   if (!targetUrl) return res.status(400).json({ error: 'Missing url' });
   while (targetUrl.includes('%25')) targetUrl = decodeURIComponent(targetUrl);
+  const secErr = validateUrl(targetUrl);
+  if (secErr) return res.status(403).json({ error: secErr });
 
   try {
     const resp = await axios.get(targetUrl, {
