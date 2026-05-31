@@ -1,0 +1,16 @@
+{
+  "name": "getvideo",
+  "version": "2.0.0",
+  "description": "规则解耦影视聚合搜索 — 零流量穿透 + no-referrer 破防盗链",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "axios": "^1.6.0",
+    "cheerio": "^1.0.0-rc.12",
+    "cors": "^2.8.5"
+  }
+}

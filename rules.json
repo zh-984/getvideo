@@ -1,0 +1,69 @@
+{
+  "sites": [
+    {
+      "site_name": "暴风资源",
+      "enabled": true,
+      "mode": "api",
+      "base_url": "https://bfzyapi.com",
+      "search_url": "https://bfzyapi.com/api.php/provide/vod/?ac=detail&wd={keyword}&pg={page}",
+      "list_selector": null,
+      "title_selector": null,
+      "link_selector": null,
+      "cover_field": "vod_pic",
+      "video_url_regex": null,
+      "timeout_ms": 10000
+    },
+    {
+      "site_name": "360资源",
+      "enabled": true,
+      "mode": "api",
+      "base_url": "https://360zy.com",
+      "search_url": "https://360zy.com/api.php/provide/vod/?ac=detail&wd={keyword}&pg={page}",
+      "list_selector": null,
+      "title_selector": null,
+      "link_selector": null,
+      "cover_field": "vod_pic",
+      "video_url_regex": null,
+      "timeout_ms": 10000
+    },
+    {
+      "site_name": "非凡资源",
+      "enabled": true,
+      "mode": "api",
+      "base_url": "https://api.ffzyapi.com",
+      "search_url": "https://api.ffzyapi.com/api.php/provide/vod/?ac=detail&wd={keyword}&pg={page}",
+      "list_selector": null,
+      "title_selector": null,
+      "link_selector": null,
+      "cover_field": "vod_pic",
+      "video_url_regex": null,
+      "timeout_ms": 10000
+    },
+    {
+      "site_name": "iKun资源",
+      "enabled": true,
+      "mode": "api",
+      "base_url": "https://ikunzyapi.com",
+      "search_url": "https://ikunzyapi.com/api.php/provide/vod/?ac=detail&wd={keyword}&pg={page}",
+      "list_selector": null,
+      "title_selector": null,
+      "link_selector": null,
+      "cover_field": "vod_pic",
+      "video_url_regex": null,
+      "timeout_ms": 10000
+    },
+    {
+      "site_name": "素材采集",
+      "enabled": true,
+      "mode": "api",
+      "base_url": "https://subocaiji.com",
+      "search_url": "https://subocaiji.com/api.php/provide/vod/?ac=detail&wd={keyword}&pg={page}",
+      "list_selector": null,
+      "title_selector": null,
+      "link_selector": null,
+      "cover_field": "vod_pic",
+      "video_url_regex": null,
+      "timeout_ms": 10000
+    }
+  ]
+}

@@ -1,0 +1,18 @@
+# Dependencies
+node_modules/
+
+# Build output
+project.zip
+
+# Private config (contains real IPs, keys)
+.env
+README.private.md
+
+# System files
+.DS_Store
+Thumbs.db
+*.log
+
+# IDE
+.vscode/
+.idea/
