@@ -298,8 +298,10 @@ function initPlayer(source){
           video.play().catch(()=>{});
           log('ok','✓ 就绪，直连 CDN 播放');
         });
+        let fragCount=0;
         hls.on(Hls.Events.FRAG_LOADED,(_,d)=>{
-          log('ok','✓ 分片 '+d.frag?.url?.split('/').pop());
+          fragCount++;
+          if(fragCount%50===1)log('ok','✓ 已加载 '+fragCount+' 个分片');
         });
         hls.on(Hls.Events.ERROR,(_,d)=>{
           log('err','hls: '+d.details+' fatal='+d.fatal);

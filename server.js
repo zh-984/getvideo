@@ -420,7 +420,11 @@ app.get('/api/info', (_req, res) => {
     sites: rules.sites.map(s => ({ name: s.site_name, enabled: s.enabled !== false })),
     endpoints: {
       search: 'GET /api/search?keyword=xxx',
+      m3u8:   'GET /api/m3u8?url=xxx [&full=1]',
+      key:    'GET /api/key?url=xxx',
+      ts:     'GET /api/ts?url=xxx',
       parse:  'GET /api/parse?url=xxx',
+      reload: 'POST /api/rules/reload',
       info:   'GET /api/info',
     },
   });
