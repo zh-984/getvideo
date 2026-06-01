@@ -202,25 +202,21 @@ window.addEventListener('pageshow', (e) => {
 
 // 统一的状态同步函数
 function syncPlayerState(){
-  const box = document.getElementById('player-box');
-  if (state === 'playing' && !box) {
-    destroyPlayer();
-    render();
-  } else if (state !== 'playing') {
+  // 不在播放页但播放器实例还在 → 强制清理
+  if (state !== 'playing' && art) {
     destroyPlayer();
     render();
   }
 }
 
-// ★ 定时检查器：每 500ms 检测一次，防止任何情况下的播放器残留
+// ★ 定时检查器：每 500ms 检测一次
+//   不依赖 DOM 查询，直接用 JS 全局变量 art 判断
+//   art 有值 = 播放器实例还活着，必须在非播放状态时清理
 setInterval(() => {
-  if (state !== 'playing') {
-    const orphan = document.querySelector('.artplayer-app, video, iframe, [class*="art-"]');
-    if (orphan) {
-      console.warn('[guard] 发现残留播放器元素，强制清理');
-      destroyPlayer();
-      render();
-    }
+  if (state !== 'playing' && art) {
+    console.warn('[guard] 非播放状态发现残留播放器实例，强制清理');
+    destroyPlayer();
+    render();
   }
 }, 500);
 
