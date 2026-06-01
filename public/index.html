@@ -180,6 +180,21 @@ window.addEventListener('popstate', (e) => {
   }
 });
 
+// ★ 手机切后台再回来时，修复播放器状态
+//   问题：切后台 → 浏览器可能保持播放器 DOM → 回来时 state 和 DOM 不同步
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) {
+    // 切到后台：暂停视频，减少资源占用
+    try { if (art?.video) art.video.pause(); } catch(e) {}
+  } else {
+    // 回到前台：如果不在播放页但播放器还在 → 强制清理
+    if (state !== 'playing') {
+      destroyPlayer();
+      render();
+    }
+  }
+});
+
 // ── 搜索 ──
 async function doSearch(){
   const kw=$kw.value.trim(); if(!kw)return;
