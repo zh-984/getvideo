@@ -166,6 +166,15 @@ let history=JSON.parse(localStorage.getItem('gv_history')||'[]');
 const $app=document.getElementById('app'), $kw=document.getElementById('kw'), $sbtn=document.getElementById('sbtn');
 $kw.addEventListener('keyup',e=>{if(e.key==='Enter')doSearch()});
 
+// 事件委托：历史标签点击
+$app.addEventListener('click', (e) => {
+  const item = e.target.closest('.hist-item');
+  if (item && item.dataset.kw) {
+    $kw.value = item.dataset.kw;
+    doSearch();
+  }
+});
+
 function saveHistory(kw){
   history=history.filter(h=>h!==kw);
   history.unshift(kw);
@@ -474,7 +483,7 @@ function render(){
       <span class="tag" onclick="hot(this)">你的名字</span><span class="tag" onclick="hot(this)">灌篮高手</span>
       <span class="tag" onclick="hot(this)">流浪地球</span><span class="tag" onclick="hot(this)">复仇者联盟</span>
     </div>
-    ${history.length?`<div class="hist"><div class="hist-head"><span>🕐 搜索历史</span><span class="hist-clear" onclick="clearHistory()">清空</span></div><div class="hist-list">${history.map(kw=>`<span class="hist-item" onclick="$kw.value='${esc(kw)}';doSearch()">${esc(kw)}</span>`).join('')}</div></div>`:''}
+    ${history.length?`<div class="hist"><div class="hist-head"><span>🕐 搜索历史</span><span class="hist-clear" onclick="clearHistory()">清空</span></div><div class="hist-list">${history.map(kw=>`<span class="hist-item" data-kw="${esc(kw)}">${esc(kw)}</span>`).join('')}</div></div>`:''}
     </div>
     ${recs.length?`<div class="rec-section">
       <div class="rec-title">🎬 推荐</div>
