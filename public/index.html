@@ -71,11 +71,9 @@ input,button{font-family:inherit;outline:none;border:none;background:none}
 .hist-clear{font-size:11px;color:var(--text3);cursor:pointer;padding:2px 8px;border-radius:10px;background:var(--card);border:1px solid var(--border)}
 .hist-clear:active{background:var(--pink);color:#fff;border-color:var(--pink)}
 .hist-list{
-  display:grid;
-  grid-template-columns:repeat(8,1fr);
-  gap:8px;justify-items:center;
+  display:flex;flex-wrap:wrap;justify-content:center;gap:8px;
+  max-width:fit-content;margin:0 auto;
 }
-@media(max-width:768px){.hist-list{grid-template-columns:repeat(4,1fr)}}
 .hist-item{
   padding:5px 10px;border-radius:16px;font-size:11px;font-weight:500;
   background:var(--card);color:var(--text2);cursor:pointer;
