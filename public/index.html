@@ -71,14 +71,17 @@ input,button{font-family:inherit;outline:none;border:none;background:none}
 .hist-clear{font-size:11px;color:var(--text3);cursor:pointer;padding:2px 8px;border-radius:10px;background:var(--card);border:1px solid var(--border)}
 .hist-clear:active{background:var(--pink);color:#fff;border-color:var(--pink)}
 .hist-list{
-  display:flex;flex-wrap:wrap;justify-content:center;gap:8px;
-  overflow:hidden;max-height:64px;
+  display:grid;
+  grid-template-columns:repeat(8,1fr);
+  gap:8px;justify-items:center;
 }
-@media(max-width:768px){.hist-list{max-height:64px}}
+@media(max-width:768px){.hist-list{grid-template-columns:repeat(4,1fr)}}
 .hist-item{
-  padding:5px 14px;border-radius:16px;font-size:11px;font-weight:500;
+  padding:5px 10px;border-radius:16px;font-size:11px;font-weight:500;
   background:var(--card);color:var(--text2);cursor:pointer;
-  border:1px solid var(--border);transition:all .15s;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  border:1px solid var(--border);transition:all .15s;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%;
+  text-align:center;
 }
 .hist-item:active{background:var(--pink);color:#fff;border-color:var(--pink)}
 
