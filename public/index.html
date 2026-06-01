@@ -64,6 +64,20 @@ input,button{font-family:inherit;outline:none;border:none;background:none}
 .tag:nth-child(6n+6){background:rgba(255,245,186,.3);color:#b0a040}
 .tag:active{transform:scale(.93)}
 
+/* ── 搜索历史 ── */
+.hist{margin:20px 24px 0;text-align:left}
+.hist-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+.hist-head span:first-child{font-size:12px;font-weight:600;color:var(--text2)}
+.hist-clear{font-size:11px;color:var(--text3);cursor:pointer;padding:2px 8px;border-radius:10px;background:var(--card);border:1px solid var(--border)}
+.hist-clear:active{background:var(--pink);color:#fff;border-color:var(--pink)}
+.hist-list{display:flex;flex-wrap:wrap;gap:8px}
+.hist-item{
+  padding:5px 14px;border-radius:16px;font-size:11px;font-weight:500;
+  background:var(--card);color:var(--text2);cursor:pointer;
+  border:1px solid var(--border);transition:all .15s;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.hist-item:active{background:var(--pink);color:#fff;border-color:var(--pink)}
+
 /* ── 安全提醒 ── */
 .warn{display:flex;align-items:center;gap:8px;padding:8px 18px;margin:8px 18px 0;border-radius:10px;background:linear-gradient(135deg,rgba(255,182,194,.15),rgba(255,218,185,.15));border:1px solid rgba(255,182,194,.25)}
 .warn-icon{font-size:14px;flex-shrink:0}
@@ -148,8 +162,21 @@ body:not(.state-playing) [class*="art-"]{
 <script>
 const API = '';
 let art=null, hls=null, state='idle', results=[], film=null, eps=[], curEp=0, logs=[], recs=[];
+let history=JSON.parse(localStorage.getItem('gv_history')||'[]');
 const $app=document.getElementById('app'), $kw=document.getElementById('kw'), $sbtn=document.getElementById('sbtn');
 $kw.addEventListener('keyup',e=>{if(e.key==='Enter')doSearch()});
+
+function saveHistory(kw){
+  history=history.filter(h=>h!==kw);
+  history.unshift(kw);
+  if(history.length>20)history=history.slice(0,20);
+  localStorage.setItem('gv_history',JSON.stringify(history));
+}
+function clearHistory(){
+  history=[];
+  localStorage.removeItem('gv_history');
+  if(state==='idle')render();
+}
 
 // ── 页面加载时获取推荐影片（8 部最新内容） ──
 (async()=>{
@@ -255,6 +282,7 @@ _bodyGuard.observe(document.body, { childList: true, subtree: true });
 // ── 搜索 ──
 async function doSearch(){
   const kw=$kw.value.trim(); if(!kw)return;
+  saveHistory(kw);
   pushPage('results');  // 记录历史，让返回键能回来
   $sbtn.disabled=true; $sbtn.textContent='…'; state='searching'; render();
   try{
@@ -445,7 +473,9 @@ function render(){
       <span class="tag" onclick="hot(this)">三体</span><span class="tag" onclick="hot(this)">甄嬛传</span>
       <span class="tag" onclick="hot(this)">你的名字</span><span class="tag" onclick="hot(this)">灌篮高手</span>
       <span class="tag" onclick="hot(this)">流浪地球</span><span class="tag" onclick="hot(this)">复仇者联盟</span>
-    </div></div>
+    </div>
+    ${history.length?`<div class="hist"><div class="hist-head"><span>🕐 搜索历史</span><span class="hist-clear" onclick="clearHistory()">清空</span></div><div class="hist-list">${history.map(kw=>`<span class="hist-item" onclick="$kw.value='${esc(kw)}';doSearch()">${esc(kw)}</span>`).join('')}</div></div>`:''}
+    </div>
     ${recs.length?`<div class="rec-section">
       <div class="rec-title">🎬 推荐</div>
       <div class="rec-row">${recs.map((r,i)=>`
