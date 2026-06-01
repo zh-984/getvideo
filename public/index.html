@@ -191,7 +191,14 @@ document.addEventListener('visibilitychange', () => {
   if (document.hidden) {
     try { if (art?.video) art.video.pause(); } catch(e) {}
   } else {
-    syncPlayerState();
+    // 回到前台：如果不在播放页，暴力清除所有可能的残留
+    if (state !== 'playing') {
+      if (art) { destroyPlayer(); render(); }
+      // 兜底：即使 art 是 null，也删掉页面上所有 video/iframe
+      document.querySelectorAll('video, iframe').forEach(v => {
+        try { if(v.pause) v.pause(); v.remove(); } catch(e) {}
+      });
+    }
   }
 });
 
@@ -219,6 +226,31 @@ setInterval(() => {
     render();
   }
 }, 500);
+
+// ★★ MutationObserver：监听 DOM 变化，发现非播放状态下出现 video 元素立即移除
+//   这是终极防护，不管 video 元素是怎么出现的（ArtPlayer 残留、浏览器恢复、微任务创建）
+const _bodyGuard = new MutationObserver((mutations) => {
+  if (state === 'playing') return; // 正在播放不管
+  for (const m of mutations) {
+    for (const node of m.addedNodes) {
+      if (node.nodeType !== 1) continue; // 只看元素节点
+      // 如果添加的元素是 video，或者包含 video，或者 class 含 art-
+      if (node.tagName === 'VIDEO' || node.tagName === 'IFRAME' ||
+          (node.className && typeof node.className === 'string' && node.className.includes('art-'))) {
+        console.warn('[MutationObserver] 非播放状态发现残留元素，移除:', node.tagName, node.className);
+        try { if (node.pause) node.pause(); node.remove(); } catch(e) {}
+      }
+      // 也检查添加元素的子节点
+      if (node.querySelectorAll) {
+        node.querySelectorAll('video, iframe, [class*="art-"]').forEach(el => {
+          console.warn('[MutationObserver] 移除子元素:', el.tagName);
+          try { if (el.pause) el.pause(); el.remove(); } catch(e) {}
+        });
+      }
+    }
+  }
+});
+_bodyGuard.observe(document.body, { childList: true, subtree: true });
 
 // ── 搜索 ──
 async function doSearch(){
