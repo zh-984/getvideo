@@ -93,13 +93,14 @@ input,button{font-family:inherit;outline:none;border:none;background:none}
 
 .ply{position:relative;width:100%;background:#000;aspect-ratio:16/9;max-height:55vh;overflow:hidden}
 .ply .artplayer-app{width:100%!important;height:100%!important}
-/* 非播放状态时强制隐藏残留的播放器（三重保险） */
+/* 非播放状态时强制隐藏残留的播放器 */
 body:not(.state-playing) .artplayer-app,
 body:not(.state-playing) video,
-body:not(.state-playing) .art-mini,
-body:not(.state-playing) .art-fullscreen-fixed{
+body:not(.state-playing) [class^="art-"]{
   display:none!important;visibility:hidden!important;opacity:0!important;
-  pointer-events:none!important;position:absolute!important;z-index:-9999!important;
+  pointer-events:none!important;position:fixed!important;top:-9999px!important;left:-9999px!important;
+  width:0!important;height:0!important;z-index:-9999!important;overflow:hidden!important;
+}
 }
 
 .nav{display:flex;align-items:center;gap:10px;padding:12px 18px;background:var(--bg);border-bottom:1px solid var(--border)}
@@ -203,15 +204,25 @@ window.addEventListener('pageshow', (e) => {
 function syncPlayerState(){
   const box = document.getElementById('player-box');
   if (state === 'playing' && !box) {
-    // 在播放页但 DOM 被回收 → 重新渲染
     destroyPlayer();
     render();
-  } else if (state !== 'playing' && (art || document.querySelector('.artplayer-app'))) {
-    // 不在播放页但播放器还在 → 强制清理
+  } else if (state !== 'playing' && (art || document.querySelector('.artplayer-app, video'))) {
     destroyPlayer();
     render();
   }
 }
+
+// ★ 定时检查器：每 500ms 检测一次，防止任何情况下的播放器残留
+setInterval(() => {
+  if (state !== 'playing') {
+    const orphan = document.querySelector('.artplayer-app, video, [class^="art-loading"], [class^="art-context"]');
+    if (orphan) {
+      console.warn('[guard] 发现残留播放器元素，强制清理');
+      destroyPlayer();
+      render();
+    }
+  }
+}, 500);
 
 // ── 搜索 ──
 async function doSearch(){
@@ -248,21 +259,18 @@ function destroyPlayer(){
   // 4. 强制清空播放器容器
   const box=document.getElementById('player-box');
   if(box) box.innerHTML='';
-  // 5. 清除 ArtPlayer 和 hls.js 可能残留的所有 DOM 元素
-  document.querySelectorAll(
-    '.artplayer-app,.art-danmaku,.art-contextmenus,.art-settings,'+
-    '.art-mini,.art-fullscreen,.art-fullscreen-fixed,.art-loading,.art-notice'
-  ).forEach(el=>{try{el.remove();}catch(e){}});
-  // 6. 清除可能残留的 video 元素（ArtPlayer 有时会创建额外的）
+  // 5. 清除所有 ArtPlayer 残留（用 class 前缀匹配，覆盖全部 art- 元素）
+  document.querySelectorAll('[class*="art-"]').forEach(el=>{try{el.remove();}catch(e){}});
+  // 6. 清除所有 video 元素（ArtPlayer 有时在 body 上创建额外 video）
   document.querySelectorAll('video').forEach(v=>{
     try{v.pause();v.removeAttribute('src');v.load();v.remove();}catch(e){}
   });
-  // 7. 恢复 body 滚动
+  // 7. 恢复 body 样式
   document.body.style.overflow='';
   document.body.style.position='';
   document.body.style.width='';
   document.body.style.height='';
-  // 8. 退出全屏（如果浏览器还处于全屏状态）
+  // 8. 退出全屏
   try{if(document.fullscreenElement)document.exitFullscreen();}catch(e){}
   try{if(document.webkitFullscreenElement)document.webkitExitFullscreen();}catch(e){}
 }
