@@ -93,9 +93,14 @@ input,button{font-family:inherit;outline:none;border:none;background:none}
 
 .ply{position:relative;width:100%;background:#000;aspect-ratio:16/9;max-height:55vh;overflow:hidden}
 .ply .artplayer-app{width:100%!important;height:100%!important}
-/* 非播放状态时强制隐藏残留的播放器 */
+/* 非播放状态时强制隐藏残留的播放器（三重保险） */
 body:not(.state-playing) .artplayer-app,
-body:not(.state-playing) video{display:none!important}
+body:not(.state-playing) video,
+body:not(.state-playing) .art-mini,
+body:not(.state-playing) .art-fullscreen-fixed{
+  display:none!important;visibility:hidden!important;opacity:0!important;
+  pointer-events:none!important;position:absolute!important;z-index:-9999!important;
+}
 
 .nav{display:flex;align-items:center;gap:10px;padding:12px 18px;background:var(--bg);border-bottom:1px solid var(--border)}
 .nb{width:34px;height:34px;border-radius:50%;background:linear-gradient(135deg,var(--lavender),var(--sky));color:#fff;font-size:16px;font-weight:700;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;box-shadow:0 2px 8px rgba(195,177,225,.3)}
@@ -180,20 +185,33 @@ window.addEventListener('popstate', (e) => {
   }
 });
 
-// ★ 手机切后台再回来时，修复播放器状态
-//   问题：切后台 → 浏览器可能保持播放器 DOM → 回来时 state 和 DOM 不同步
+// ★ 手机切后台再回来时，强制同步 state 和 DOM
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) {
-    // 切到后台：暂停视频，减少资源占用
     try { if (art?.video) art.video.pause(); } catch(e) {}
   } else {
-    // 回到前台：如果不在播放页但播放器还在 → 强制清理
-    if (state !== 'playing') {
-      destroyPlayer();
-      render();
-    }
+    syncPlayerState();
   }
 });
+
+// ★ 页面从浏览器缓存恢复时也会触发（手机切后台回来的另一种情况）
+window.addEventListener('pageshow', (e) => {
+  if (e.persisted) syncPlayerState();
+});
+
+// 统一的状态同步函数
+function syncPlayerState(){
+  const box = document.getElementById('player-box');
+  if (state === 'playing' && !box) {
+    // 在播放页但 DOM 被回收 → 重新渲染
+    destroyPlayer();
+    render();
+  } else if (state !== 'playing' && (art || document.querySelector('.artplayer-app'))) {
+    // 不在播放页但播放器还在 → 强制清理
+    destroyPlayer();
+    render();
+  }
+}
 
 // ── 搜索 ──
 async function doSearch(){
@@ -222,20 +240,31 @@ function selectFilm(idx){
 // ── 返回函数 ──
 function destroyPlayer(){
   // 1. 先暂停视频，阻止继续加载
-  try{if(art?.video){art.video.pause();art.video.src='';art.video.load();}}catch(e){}
+  try{if(art?.video){art.video.pause();art.video.removeAttribute('src');art.video.load();}}catch(e){}
   // 2. 销毁 hls
   try{if(hls){hls.destroy();hls=null;}}catch(e){}
   // 3. 销毁 ArtPlayer
   try{if(art){art.destroy();art=null;}}catch(e){}
-  // 4. 强制清空播放器容器（防止 ArtPlayer 残留 DOM）
+  // 4. 强制清空播放器容器
   const box=document.getElementById('player-box');
   if(box) box.innerHTML='';
-  // 5. 清除 ArtPlayer 可能残留的全局元素
-  document.querySelectorAll('.artplayer-app,.art-danmaku,.art-contextmenus,.art-settings').forEach(el=>{
-    try{el.remove();}catch(e){}
+  // 5. 清除 ArtPlayer 和 hls.js 可能残留的所有 DOM 元素
+  document.querySelectorAll(
+    '.artplayer-app,.art-danmaku,.art-contextmenus,.art-settings,'+
+    '.art-mini,.art-fullscreen,.art-fullscreen-fixed,.art-loading,.art-notice'
+  ).forEach(el=>{try{el.remove();}catch(e){}});
+  // 6. 清除可能残留的 video 元素（ArtPlayer 有时会创建额外的）
+  document.querySelectorAll('video').forEach(v=>{
+    try{v.pause();v.removeAttribute('src');v.load();v.remove();}catch(e){}
   });
-  // 6. 恢复 body 滚动（全屏模式可能禁用了）
+  // 7. 恢复 body 滚动
   document.body.style.overflow='';
+  document.body.style.position='';
+  document.body.style.width='';
+  document.body.style.height='';
+  // 8. 退出全屏（如果浏览器还处于全屏状态）
+  try{if(document.fullscreenElement)document.exitFullscreen();}catch(e){}
+  try{if(document.webkitFullscreenElement)document.webkitExitFullscreen();}catch(e){}
 }
 
 function backToResults(){
