@@ -96,11 +96,11 @@ input,button{font-family:inherit;outline:none;border:none;background:none}
 /* 非播放状态时强制隐藏残留的播放器 */
 body:not(.state-playing) .artplayer-app,
 body:not(.state-playing) video,
-body:not(.state-playing) [class^="art-"]{
+body:not(.state-playing) iframe,
+body:not(.state-playing) [class*="art-"]{
   display:none!important;visibility:hidden!important;opacity:0!important;
   pointer-events:none!important;position:fixed!important;top:-9999px!important;left:-9999px!important;
   width:0!important;height:0!important;z-index:-9999!important;overflow:hidden!important;
-}
 }
 
 .nav{display:flex;align-items:center;gap:10px;padding:12px 18px;background:var(--bg);border-bottom:1px solid var(--border)}
@@ -206,7 +206,7 @@ function syncPlayerState(){
   if (state === 'playing' && !box) {
     destroyPlayer();
     render();
-  } else if (state !== 'playing' && (art || document.querySelector('.artplayer-app, video'))) {
+  } else if (state !== 'playing') {
     destroyPlayer();
     render();
   }
@@ -215,7 +215,7 @@ function syncPlayerState(){
 // ★ 定时检查器：每 500ms 检测一次，防止任何情况下的播放器残留
 setInterval(() => {
   if (state !== 'playing') {
-    const orphan = document.querySelector('.artplayer-app, video, [class^="art-loading"], [class^="art-context"]');
+    const orphan = document.querySelector('.artplayer-app, video, iframe, [class*="art-"]');
     if (orphan) {
       console.warn('[guard] 发现残留播放器元素，强制清理');
       destroyPlayer();
@@ -262,8 +262,15 @@ function destroyPlayer(){
   // 5. 清除所有 ArtPlayer 残留（用 class 前缀匹配，覆盖全部 art- 元素）
   document.querySelectorAll('[class*="art-"]').forEach(el=>{try{el.remove();}catch(e){}});
   // 6. 清除所有 video 元素（ArtPlayer 有时在 body 上创建额外 video）
-  document.querySelectorAll('video').forEach(v=>{
-    try{v.pause();v.removeAttribute('src');v.load();v.remove();}catch(e){}
+  document.querySelectorAll('video, iframe').forEach(v=>{
+    try{
+      if(v.pause) v.pause();
+      v.src='';
+      v.removeAttribute('src');
+      if(v.load) v.load();
+      v.style.display='none';
+      v.remove();
+    }catch(e){}
   });
   // 7. 恢复 body 样式
   document.body.style.overflow='';
