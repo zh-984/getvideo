@@ -414,7 +414,15 @@ function initPlayer(source){
           if(video.canPlayType('application/vnd.apple.mpegurl'))video.src=url;
           else log('err','浏览器不支持 HLS'); return;
         }
-        hls=new Hls({maxBufferLength:30,maxMaxBufferLength:60});
+        hls=new Hls({
+          maxBufferLength:60,           // 缓冲 60 秒（默认 30 太小，容易断音）
+          maxMaxBufferLength:120,       // 最大缓冲 120 秒
+          maxBufferHole:0.5,            // 允许 0.5 秒音频空洞（避免跳帧）
+          enableWorker:true,            // Web Worker 解码，减少主线程卡顿
+          stretchShortVideoTrack:true,  // 音视频长度不一致时拉伸填充
+          forceKeyFrameOnDiscontinuity:true,  // 切集时强制关键帧
+          lowLatencyMode:false,         // 关闭低延迟模式（点播不需要，稳定性优先）
+        });
         hls.loadSource(url);
         hls.attachMedia(video);
         hls.on(Hls.Events.MANIFEST_PARSED,()=>{
