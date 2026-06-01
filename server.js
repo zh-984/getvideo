@@ -134,6 +134,31 @@ function loadRules() {
 }
 loadRules();
 
+// ★ 站点健康追踪：记录每个站点最近一次搜索的成功/失败状态
+const siteHealth = {};
+function recordSiteHealth(siteId, success) {
+  const h = siteHealth[siteId] || { successes: 0, failures: 0, lastError: '', lastSuccess: 0 };
+  if (success) {
+    h.successes++;
+    h.lastSuccess = Date.now();
+    h.consecutiveFails = 0;
+  } else {
+    h.failures++;
+    h.consecutiveFails = (h.consecutiveFails || 0) + 1;
+  }
+  siteHealth[siteId] = h;
+}
+// 定期日志输出站点健康（每 30 分钟）
+setInterval(() => {
+  const entries = Object.entries(siteHealth);
+  if (!entries.length) return;
+  console.log('[health] Site status:');
+  entries.forEach(([id, h]) => {
+    const status = h.consecutiveFails >= 5 ? '❌ DOWN' : h.consecutiveFails >= 2 ? '⚠️ DEGRADED' : '✅ OK';
+    console.log(`  ${id}: ${status} (${h.successes} ok / ${h.failures} fail)`);
+  });
+}, 30 * 60 * 1000);
+
 
 // ══════════════════════════════════════
 //  § 2.  搜索引擎（API 模式 + HTML 模式）
@@ -238,7 +263,16 @@ app.get('/api/search', async (req, res) => {
     return res.json({ ...cached.data, cached: true });
   }
 
-  const enabled = rules.sites.filter(s => s.enabled !== false);
+  const enabled = rules.sites.filter(s => {
+    if (s.enabled === false) return false;
+    // ★ 连续失败 5 次以上的站点临时跳过，30 分钟后自动恢复
+    const h = siteHealth[s.id];
+    if (h && h.consecutiveFails >= 5 && Date.now() - h.lastSuccess < 30 * 60 * 1000) {
+      console.log(`[search] Skip degraded site: ${s.site_name} (${h.consecutiveFails} fails)`);
+      return false;
+    }
+    return true;
+  });
   if (!enabled.length) return res.status(500).json({ error: 'No enabled sites in rules.json' });
 
   const results = await Promise.allSettled(enabled.map(site => {
@@ -255,9 +289,15 @@ app.get('/api/search', async (req, res) => {
 
   const merged = [];
   results.forEach((r, i) => {
-    if (r.status === 'fulfilled') {
+    const siteId = enabled[i].id || enabled[i].site_name;
+    if (r.status === 'fulfilled' && r.value.length > 0) {
       merged.push(...r.value);
+      recordSiteHealth(siteId, true);
+    } else if (r.status === 'fulfilled') {
+      recordSiteHealth(siteId, false);
+      console.error(`[search] ${enabled[i].site_name}: 0 results`);
     } else {
+      recordSiteHealth(siteId, false);
       console.error(`[search] ${enabled[i].site_name}: ${r.reason?.message}`);
     }
   });
@@ -524,11 +564,20 @@ app.get('/api/key', async (req, res) => {
 app.get('/api/info', (_req, res) => {
   res.json({
     name: 'GetVideo',
-    version: '2.0.0',
+    version: '3.0.0',
     mode: '零流量穿透',
     uptime: Math.floor(process.uptime()) + 's',
     memory: (process.memoryUsage().heapUsed / 1024 / 1024).toFixed(1) + ' MB',
-    sites: rules.sites.map(s => ({ name: s.site_name, enabled: s.enabled !== false })),
+    sites: rules.sites.map(s => {
+      const h = siteHealth[s.id] || {};
+      return {
+        name: s.site_name,
+        enabled: s.enabled !== false,
+        health: h.consecutiveFails >= 5 ? 'DOWN' : h.consecutiveFails >= 2 ? 'DEGRADED' : 'OK',
+        successes: h.successes || 0,
+        failures: h.failures || 0,
+      };
+    }),
     endpoints: {
       search: 'GET /api/search?keyword=xxx',
       m3u8:   'GET /api/m3u8?url=xxx [&full=1]',
