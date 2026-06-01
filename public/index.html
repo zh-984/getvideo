@@ -127,6 +127,7 @@ input,button{font-family:inherit;outline:none;border:none;background:none}
 @media(max-width:768px){.rec-section{display:none}}
 
 .ld{text-align:center;padding:70px 24px}
+.ld-text{font-size:12px;color:var(--text3)}
 .dots{display:flex;gap:8px;justify-content:center;margin-bottom:16px}
 .dot{width:10px;height:10px;border-radius:50%;animation:bounce 1.2s infinite}
 .dot:nth-child(1){background:var(--pink);animation-delay:0s}
@@ -182,7 +183,7 @@ body:not(.state-playing) [class*="art-"]{
   <div class="logo"><b>G</b>et<span>V</span>ideo</div>
   <div class="srow">
     <input id="kw" class="sinp" type="search" inputmode="search" placeholder="搜索影片…" autocomplete="off">
-    <button id="sbtn" class="sbtn" onclick="doSearch()">搜索</button>
+    <button id="sbtn" class="sbtn" onclick="hideSuggestions();doSearch()">搜索</button>
   </div>
 </div>
 
@@ -191,10 +192,10 @@ body:not(.state-playing) [class*="art-"]{
 <script>
 const API = '';
 let art=null, hls=null, state='idle', results=[], film=null, eps=[], curEp=0, logs=[], recs=[];
-let searchHistory=JSON.parse(localStorage.getItem('gv_history')||'[]');
-
-// ★ 播放进度记忆：{ "影片标题": { ep: 0, time: 120, label: "第1集" } }
-let playProgress=JSON.parse(localStorage.getItem('gv_progress')||'{}');
+let searchHistory=[];
+let playProgress={};
+try{searchHistory=JSON.parse(localStorage.getItem('gv_history')||'[]')}catch(e){}
+try{playProgress=JSON.parse(localStorage.getItem('gv_progress')||'{}')}catch(e){}
 
 function saveProgress(title,epIdx,time,label){
   if(!title)return;
@@ -211,12 +212,19 @@ function getProgress(title){
   return playProgress[title]||null;
 }
 
-// 每 5 秒自动保存播放进度
+// 每 5 秒自动保存播放进度 + 暂停时也保存
 setInterval(()=>{
   if(state==='playing'&&film?.title&&art?.video&&!art.video.paused){
     saveProgress(film.title,curEp,art.video.currentTime,eps[curEp]?.label);
   }
 },5000);
+// 暂停事件监听（在 initPlayer 中 art 创建后绑定）
+function bindProgressSave(){
+  if(!art?.video)return;
+  art.video.addEventListener('pause',()=>{
+    if(film?.title) saveProgress(film.title,curEp,art.video.currentTime,eps[curEp]?.label);
+  });
+}
 const $app=document.getElementById('app'), $kw=document.getElementById('kw'), $sbtn=document.getElementById('sbtn');
 $kw.addEventListener('keyup',e=>{
   if(e.key==='Enter'){hideSuggestions();doSearch();}
@@ -255,10 +263,11 @@ function showSuggestions(q){
   }
   const qEsc=esc(q);
   const qRegSafe=escRegex(qEsc);
+  const qReg=new RegExp(`(${qRegSafe})`,'gi');
   box.innerHTML=merged.map(w=>{
     const wEsc=esc(w);
     const icon=fromHistory.includes(w)?'🕐':'🔥';
-    const highlighted=wEsc.replace(new RegExp(`(${qRegSafe})`,'gi'),'<b style="color:#FF8FA3">$1</b>');
+    const highlighted=wEsc.replace(qReg,'<b style="color:#FF8FA3">$1</b>');
     return `<div class="suggest-item" data-kw="${wEsc}"><span class="suggest-icon">${icon}</span><span>${highlighted}</span></div>`;
   }).join('');
   box.style.display='block';
@@ -429,10 +438,8 @@ function destroyPlayer(){
   document.querySelectorAll('video, iframe').forEach(v=>{
     try{
       if(v.pause) v.pause();
-      v.src='';
       v.removeAttribute('src');
       if(v.load) v.load();
-      v.style.display='none';
       v.remove();
     }catch(e){}
   });
@@ -538,8 +545,12 @@ function initPlayer(source){
     customType:{
       m3u8(video,url){
         if(!Hls.isSupported()){
-          if(video.canPlayType('application/vnd.apple.mpegurl'))video.src=url;
-          else log('err','浏览器不支持 HLS'); return;
+          if(video.canPlayType('application/vnd.apple.mpegurl')){
+            video.src=url;
+          } else {
+            log('err','浏览器不支持 HLS');
+          }
+          return;
         }
         hls=new Hls({
           maxBufferLength:60,           // 缓冲 60 秒（默认 30 太小，容易断音）
@@ -579,6 +590,7 @@ function initPlayer(source){
   });
   art.on('video:playing',()=>log('ok','▶ 播放中'));
   art.on('videoPlaybackRate',r=>{document.querySelectorAll('.pl[data-s]').forEach(e=>e.classList.toggle('on',+e.dataset.s===r))});
+  bindProgressSave();
 }
 
 // ── 渲染 ──
@@ -614,7 +626,7 @@ function render(){
     </div>`:''}`;
   }
   if(state==='searching'){
-    h=`<div class="ld"><div class="dots"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div><div style="font-size:12px;color:var(--text3)">正在搜索…</div></div>`;
+    h=`<div class="ld"><div class="dots"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div><div class="ld-text">正在搜索…</div></div>`;
   }
   if(state==='results'){
     if(!results.length){
