@@ -233,7 +233,7 @@ function showSuggestions(q){
   box.innerHTML=merged.map(w=>
     `<div class="suggest-item" data-kw="${esc(w)}" style="padding:10px 16px;font-size:13px;color:#5A5A6E;cursor:pointer;border-bottom:1px solid #f8f4f2;display:flex;align-items:center;gap:8px">`+
     `<span style="color:#C5C5D6;font-size:11px">${fromHistory.includes(w)?'🕐':'🔥'}</span>`+
-    `<span>${esc(w).replace(new RegExp(`(${esc(q)})`,'gi'),'<b style="color:#FF8FA3">$1</b>')}</span></div>`
+    `<span>${esc(w).replace(new RegExp(`(${escRegex(esc(q))})`,'gi'),'<b style="color:#FF8FA3">$1</b>')}</span></div>`
   ).join('');
   box.style.display='block';
 }
@@ -338,16 +338,22 @@ function syncPlayerState(){
   }
 }
 
-// ★ 定时检查器：每 500ms 检测一次
-//   不依赖 DOM 查询，直接用 JS 全局变量 art 判断
-//   art 有值 = 播放器实例还活着，必须在非播放状态时清理
+// ★ 定时检查器：每 500ms 检测，仅在必要时触发清理（避免重复 render）
+let _lastGuardClean=0;
 setInterval(() => {
   if (state !== 'playing' && art) {
-    console.warn('[guard] 非播放状态发现残留播放器实例，强制清理');
-    destroyPlayer();
-    render();
+    const now=Date.now();
+    if(now-_lastGuardClean>1000){ // 节流：最多 1 秒清理一次
+      _lastGuardClean=now;
+      console.warn('[guard] 非播放状态发现残留播放器，清理');
+      destroyPlayer();
+      render();
+    }
   }
 }, 500);
+
+// 续播等待定时器（离开页面时清理）
+let _resumeTimer=null;
 
 // ── 搜索 ──
 async function doSearch(){
@@ -379,20 +385,23 @@ function selectFilm(idx){
     playEp(curEp);
     // 续播：等待视频加载后跳转到上次的时间点
     if(pg&&pg.time>10){
-      const _waitResume=setInterval(()=>{
+      clearInterval(_resumeTimer);
+      _resumeTimer=setInterval(()=>{
         if(art?.video&&art.video.duration>0){
           art.video.currentTime=Math.min(pg.time,art.video.duration-5);
           showToast('已跳转到上次播放位置 '+formatTime(pg.time));
-          clearInterval(_waitResume);
+          clearInterval(_resumeTimer);
         }
       },500);
-      setTimeout(()=>clearInterval(_waitResume),10000); // 10秒超时
+      setTimeout(()=>clearInterval(_resumeTimer),10000);
     }
   }
 }
 
 // ── 返回函数 ──
 function destroyPlayer(){
+  // 0. 清理续播定时器
+  clearInterval(_resumeTimer);
   // 1. 先暂停视频，阻止继续加载
   try{if(art?.video){art.video.pause();art.video.removeAttribute('src');art.video.load();}}catch(e){}
   // 2. 销毁 hls
@@ -562,7 +571,11 @@ function initPlayer(source){
 
 // ── 渲染 ──
 const PH="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 3 4'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%23FFE0E6'/%3E%3Cstop offset='1' stop-color='%23E0F0FF'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect fill='url(%23g)' width='3' height='4'/%3E%3Ctext x='1.5' y='2.3' text-anchor='middle' fill='%23ccc' font-size='.55'%3E🎬%3C/text%3E%3C/svg%3E";
-function esc(s){if(!s)return'';const d=document.createElement('div');d.textContent=s;return d.innerHTML}
+// 复用单个 DOM 元素做 HTML 转义（避免每次创建新元素）
+const _escEl=document.createElement('div');
+function esc(s){if(!s)return'';_escEl.textContent=s;return _escEl.innerHTML}
+// 转义正则特殊字符
+function escRegex(s){return s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')}
 
 function render(){
   let h='';
@@ -625,7 +638,21 @@ function render(){
 
 function setSpeed(s){if(art)art.playbackRate=s}
 function toggleDebug(){const p=document.getElementById('dbg');if(p)p.style.display=p.style.display==='none'?'block':'none'}
-function playRec(idx){pushPage('playing');film=recs[idx];eps=film.episodes||[];curEp=0;state='playing';log('info',film.title);render();if(eps.length)playEp(0)}
+function playRec(idx){
+  pushPage('playing');
+  film=recs[idx]; eps=film.episodes||[]; state='playing';
+  const pg=getProgress(film.title);
+  curEp=pg?Math.min(pg.ep,eps.length-1):0;
+  log('info',film.title+(pg?' · 续播':''));
+  render();
+  if(eps.length){
+    playEp(curEp);
+    if(pg&&pg.time>10){
+      const _w=setInterval(()=>{if(art?.video&&art.video.duration>0){art.video.currentTime=Math.min(pg.time,art.video.duration-5);showToast('已跳转到 '+formatTime(pg.time));clearInterval(_w)}},500);
+      setTimeout(()=>clearInterval(_w),10000);
+    }
+  }
+}
 function hot(el){$kw.value=el.textContent;doSearch()}
 function log(level,msg){logs.push({t:new Date().toLocaleTimeString('zh-CN',{hour12:false}),l:level,m:msg});if(logs.length>60)logs.shift();console.log(`[${level}]${msg}`)}
 function formatTime(s){if(!s||s<0)return'';const m=Math.floor(s/60),sec=Math.floor(s%60);return m+':'+String(sec).padStart(2,'0')}

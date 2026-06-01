@@ -203,7 +203,15 @@ app.get('/api/search', async (req, res) => {
   const enabled = rules.sites.filter(s => s.enabled !== false);
   if (!enabled.length) return res.status(500).json({ error: 'No enabled sites in rules.json' });
 
-  const results = await Promise.allSettled(enabled.map(site => searchSite(keyword, site)));
+  const results = await Promise.allSettled(enabled.map(site =>
+    // ★ 每个站点独立超时，一个慢站不拖垮整体
+    Promise.race([
+      searchSite(keyword, site),
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('timeout')), (site.timeout_ms || 10000) + 2000)
+      ),
+    ])
+  ));
 
   const merged = [];
   results.forEach((r, i) => {
