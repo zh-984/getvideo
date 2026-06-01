@@ -162,7 +162,7 @@ body:not(.state-playing) [class*="art-"]{
 <script>
 const API = '';
 let art=null, hls=null, state='idle', results=[], film=null, eps=[], curEp=0, logs=[], recs=[];
-let history=JSON.parse(localStorage.getItem('gv_history')||'[]');
+let searchHistory=JSON.parse(localStorage.getItem('gv_history')||'[]');
 const $app=document.getElementById('app'), $kw=document.getElementById('kw'), $sbtn=document.getElementById('sbtn');
 $kw.addEventListener('keyup',e=>{if(e.key==='Enter')doSearch()});
 
@@ -176,13 +176,13 @@ $app.addEventListener('click', (e) => {
 });
 
 function saveHistory(kw){
-  history=history.filter(h=>h!==kw);
-  history.unshift(kw);
-  if(history.length>20)history=history.slice(0,20);
-  localStorage.setItem('gv_history',JSON.stringify(history));
+  searchHistory=searchHistory.filter(h=>h!==kw);
+  searchHistory.unshift(kw);
+  if(searchHistory.length>20)searchHistory=searchHistory.slice(0,20);
+  localStorage.setItem('gv_history',JSON.stringify(searchHistory));
 }
 function clearHistory(){
-  history=[];
+  searchHistory=[];
   localStorage.removeItem('gv_history');
   if(state==='idle')render();
 }
@@ -458,7 +458,7 @@ function render(){
       <span class="tag" onclick="hot(this)">你的名字</span><span class="tag" onclick="hot(this)">灌篮高手</span>
       <span class="tag" onclick="hot(this)">流浪地球</span><span class="tag" onclick="hot(this)">复仇者联盟</span>
     </div>
-    ${history.length?`<div class="hist"><div class="hist-head"><span>🕐 搜索历史</span><span class="hist-clear" onclick="clearHistory()">清空</span></div><div class="hist-list">${history.map(kw=>`<span class="hist-item" data-kw="${esc(kw)}">${esc(kw)}</span>`).join('')}</div></div>`:''}
+    ${searchHistory.length?`<div class="hist"><div class="hist-head"><span>🕐 搜索历史</span><span class="hist-clear" onclick="clearHistory()">清空</span></div><div class="hist-list">${searchHistory.map(kw=>`<span class="hist-item" data-kw="${esc(kw)}">${esc(kw)}</span>`).join('')}</div></div>`:''}
     </div>
     ${recs.length?`<div class="rec-section">
       <div class="rec-title">🎬 推荐</div>
