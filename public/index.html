@@ -11,8 +11,11 @@
 <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.7/dist/hls.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/artplayer@5.1.1/dist/artplayer.min.js"></script>
 
+<!-- Google Fonts 改为 display=swap 不阻塞渲染，国内备选镜像 -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@500;700;800&display=swap" rel="stylesheet">
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Nunito:wght@500;700;800&display=swap');
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 :root{
   --bg:#FFF8F6;--card:#FFFFFF;--pink:#FFB5C2;--pink-d:#FF8FA3;
@@ -199,14 +202,18 @@ try{playProgress=JSON.parse(localStorage.getItem('gv_progress')||'{}')}catch(e){
 
 function saveProgress(title,epIdx,time,label){
   if(!title)return;
-  playProgress[title]={ep:epIdx,time:Math.floor(time),label:label||'',ts:Date.now()};
-  // 只保留最近 100 条
+  const t=Math.floor(time);
+  // 如果进度几乎没变（<3秒），不写 localStorage，减少 IO
+  const prev=playProgress[title];
+  if(prev&&prev.ep===epIdx&&Math.abs(prev.time-t)<3)return;
+  playProgress[title]={ep:epIdx,time:t,label:label||'',ts:Date.now()};
+  // 只保留最近 100 条（仅在超出时排序清理）
   const keys=Object.keys(playProgress);
   if(keys.length>100){
-    const sorted=keys.sort((a,b)=>(playProgress[b].ts||0)-(playProgress[a].ts||0));
-    sorted.slice(100).forEach(k=>delete playProgress[k]);
+    keys.sort((a,b)=>(playProgress[b].ts||0)-(playProgress[a].ts||0));
+    keys.slice(100).forEach(k=>delete playProgress[k]);
   }
-  localStorage.setItem('gv_progress',JSON.stringify(playProgress));
+  try{localStorage.setItem('gv_progress',JSON.stringify(playProgress))}catch(e){}
 }
 function getProgress(title){
   return playProgress[title]||null;
@@ -219,10 +226,12 @@ setInterval(()=>{
   }
 },5000);
 // 暂停事件监听（在 initPlayer 中 art 创建后绑定）
+let _progressBound=false;
 function bindProgressSave(){
-  if(!art?.video)return;
+  if(!art?.video||_progressBound)return;
+  _progressBound=true;
   art.video.addEventListener('pause',()=>{
-    if(film?.title) saveProgress(film.title,curEp,art.video.currentTime,eps[curEp]?.label);
+    if(film?.title&&art?.video) saveProgress(film.title,curEp,art.video.currentTime,eps[curEp]?.label);
   });
 }
 const $app=document.getElementById('app'), $kw=document.getElementById('kw'), $sbtn=document.getElementById('sbtn');
@@ -300,7 +309,7 @@ function saveHistory(kw){
   searchHistory=searchHistory.filter(h=>h!==kw);
   searchHistory.unshift(kw);
   if(searchHistory.length>20)searchHistory=searchHistory.slice(0,20);
-  localStorage.setItem('gv_history',JSON.stringify(searchHistory));
+  try{localStorage.setItem('gv_history',JSON.stringify(searchHistory))}catch(e){}
 }
 function clearHistory(){
   searchHistory=[];
@@ -421,8 +430,9 @@ function selectFilm(idx){
 
 // ── 返回函数 ──
 function destroyPlayer(){
-  // 0. 清理续播定时器
+  // 0. 清理续播定时器 + 重置标记
   clearInterval(_resumeTimer);
+  _progressBound=false;
   // 1. 先暂停视频，阻止继续加载
   try{if(art?.video){art.video.pause();art.video.removeAttribute('src');art.video.load();}}catch(e){}
   // 2. 销毁 hls
@@ -672,8 +682,15 @@ function playRec(idx){
   if(eps.length){
     playEp(curEp);
     if(pg&&pg.time>10){
-      const _w=setInterval(()=>{if(art?.video&&art.video.duration>0){art.video.currentTime=Math.min(pg.time,art.video.duration-5);showToast('已跳转到 '+formatTime(pg.time));clearInterval(_w)}},500);
-      setTimeout(()=>clearInterval(_w),10000);
+      clearInterval(_resumeTimer);
+      _resumeTimer=setInterval(()=>{
+        if(art?.video&&art.video.duration>0){
+          art.video.currentTime=Math.min(pg.time,art.video.duration-5);
+          showToast('已跳转到 '+formatTime(pg.time));
+          clearInterval(_resumeTimer);
+        }
+      },500);
+      setTimeout(()=>clearInterval(_resumeTimer),10000);
     }
   }
 }
