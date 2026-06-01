@@ -429,7 +429,8 @@ async function doSearch(){
     const r=await fetch(`${API}/api/search?keyword=${encodeURIComponent(kw)}`);
     if(!r.ok)throw new Error(`HTTP ${r.status}`);
     const d=await r.json();
-    results=d.results||[];
+    // ★ 去重：多个站返回同一部影片只保留最优的一条
+    results=dedupResults(d.results||[]);
     _searchCache.set(cacheKey,{d:results,t:Date.now()});
     state='results'; log('ok',`${results.length} 条结果`);
   }catch(e){log('err','搜索: '+e.message); state='results'; results=[]}
@@ -467,6 +468,7 @@ function destroyPlayer(){
   // 0. 清理续播定时器 + 重置标记
   clearInterval(_resumeTimer);
   _progressBound=false;
+  _prefetchDone.clear();
   // 1. 先暂停视频，阻止继续加载
   try{if(art?.video){art.video.pause();art.video.removeAttribute('src');art.video.load();}}catch(e){}
   // 2. 销毁 hls
@@ -633,7 +635,7 @@ async function initPlayer(source){
       },
     },
   });
-  art.on('video:playing',()=>log('ok','▶ 播放中'));
+  art.on('video:playing',()=>{log('ok','▶ 播放中');prefetchNextEp()});
   art.on('videoPlaybackRate',r=>{document.querySelectorAll('.pl[data-s]').forEach(e=>e.classList.toggle('on',+e.dataset.s===r))});
   bindProgressSave();
 }
@@ -732,6 +734,40 @@ function playRec(idx){
 function hot(el){$kw.value=el.textContent;doSearch()}
 function log(level,msg){logs.push({t:new Date().toLocaleTimeString('zh-CN',{hour12:false}),l:level,m:msg});if(logs.length>60)logs.shift();console.log(`[${level}]${msg}`)}
 function formatTime(s){if(!s||s<0)return'';const m=Math.floor(s/60),sec=Math.floor(s%60);return m+':'+String(sec).padStart(2,'0')}
+
+// ★ 搜索结果去重：标题相同/高度相似的只保留集数最多的那条
+function dedupResults(list){
+  const map=new Map();
+  for(const item of list){
+    const key=item.title.replace(/\s+/g,'').toLowerCase();
+    const existing=map.get(key);
+    if(!existing){
+      map.set(key,item);
+    }else{
+      // 保留集数更多的、有封面的
+      const eLen=(existing.episodes||[]).length;
+      const nLen=(item.episodes||[]).length;
+      if(nLen>eLen||(!existing.cover&&item.cover)){
+        map.set(key,item);
+      }
+    }
+  }
+  return [...map.values()];
+}
+
+// ★ 预取下一集的 m3u8：当前集播放时静默预取下一集，切集时秒播
+let _prefetchDone=new Set();
+function prefetchNextEp(){
+  if(curEp>=eps.length-1)return;
+  const nextIdx=curEp+1;
+  if(_prefetchDone.has(nextIdx))return;
+  const nextEp=eps[nextIdx];
+  if(!nextEp?.url||!nextEp.url.includes('.m3u8'))return;
+  _prefetchDone.add(nextIdx);
+  // 静默请求 m3u8 文本（几 KB），让浏览器/CDN 缓存住
+  const pfUrl=`${API}/api/m3u8?url=${encodeURIComponent(nextEp.url)}`;
+  fetch(pfUrl).catch(()=>{});
+}
 
 render();
 </script>

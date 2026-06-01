@@ -262,6 +262,15 @@ app.get('/api/search', async (req, res) => {
     }
   });
 
+  // ★ 排序：有封面的优先，集数多的优先（质量更高）
+  merged.sort((a, b) => {
+    const aEp = (a.episodes || []).length;
+    const bEp = (b.episodes || []).length;
+    if (aEp !== bEp) return bEp - aEp;         // 集数多的排前面
+    if (!!b.cover !== !!a.cover) return b.cover ? 1 : -1;  // 有封面的排前面
+    return 0;
+  });
+
   const data = { keyword, total: merged.length, results: merged };
   searchCache.set(cacheKey, { data, time: Date.now() });
   res.json(data);
