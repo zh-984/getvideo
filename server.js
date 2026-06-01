@@ -266,7 +266,8 @@ app.get('/api/search', async (req, res) => {
   const enabled = rules.sites.filter(s => {
     if (s.enabled === false) return false;
     // ★ 连续失败 5 次以上的站点临时跳过，30 分钟后自动恢复
-    const h = siteHealth[s.id];
+    const siteId = s.site_name;
+    const h = siteHealth[siteId];
     if (h && h.consecutiveFails >= 5 && Date.now() - h.lastSuccess < 30 * 60 * 1000) {
       console.log(`[search] Skip degraded site: ${s.site_name} (${h.consecutiveFails} fails)`);
       return false;
@@ -289,7 +290,7 @@ app.get('/api/search', async (req, res) => {
 
   const merged = [];
   results.forEach((r, i) => {
-    const siteId = enabled[i].id || enabled[i].site_name;
+    const siteId = enabled[i].site_name;
     if (r.status === 'fulfilled' && r.value.length > 0) {
       merged.push(...r.value);
       recordSiteHealth(siteId, true);
@@ -502,7 +503,6 @@ app.get('/api/ts', async (req, res) => {
 
     // ★ 流量熔断：累计字节计数 + 超时强制断开
     let transferred = 0;
-    const startTime = Date.now();
     const killTimer = setTimeout(() => {
       console.warn(`[ts] TIMEOUT 3min, aborting ${targetUrl.slice(0,60)}`);
       resp.data.destroy();
@@ -564,12 +564,12 @@ app.get('/api/key', async (req, res) => {
 app.get('/api/info', (_req, res) => {
   res.json({
     name: 'GetVideo',
-    version: '3.0.0',
+    version: '3.1.0',
     mode: '零流量穿透',
     uptime: Math.floor(process.uptime()) + 's',
     memory: (process.memoryUsage().heapUsed / 1024 / 1024).toFixed(1) + ' MB',
     sites: rules.sites.map(s => {
-      const h = siteHealth[s.id] || {};
+      const h = siteHealth[s.site_name] || {};
       return {
         name: s.site_name,
         enabled: s.enabled !== false,
@@ -603,7 +603,7 @@ app.use((err, _req, res, _next) => {
 app.listen(PORT, () => {
   console.log(`
 ╔══════════════════════════════════════════════╗
-║  GetVideo v2.0 — 零流量穿透模式             ║
+║  GetVideo v3.1 — 零流量穿透模式             ║
 ║  Port: ${String(PORT).padEnd(37)}║
 ║  Sites: ${String(rules.sites.length).padEnd(36)}║
 ╚══════════════════════════════════════════════╝
