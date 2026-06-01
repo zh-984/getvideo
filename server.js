@@ -17,6 +17,7 @@ const { URL } = require('url');
 
 const app  = express();
 const PORT = process.env.PORT || 3000;
+app.set('trust proxy', 1); // 反向代理后正确获取客户端 IP
 
 // ── 中间件 ──
 app.use(cors());
@@ -72,15 +73,20 @@ function validateUrl(targetUrl) {
 const RULE_PATH = path.join(__dirname, 'rules.json');
 let rules = { sites: [] };
 
-// ★ 搜索结果缓存：相同关键词 5 分钟内直接返回缓存，减少资源站请求
+// ★ 搜索结果缓存：相同关键词 5 分钟内直接返回缓存
 const searchCache = new Map();
-const CACHE_TTL = 5 * 60 * 1000; // 5 分钟
+const CACHE_TTL = 5 * 60 * 1000;
+const CACHE_MAX = 200; // 最多缓存 200 个关键词，防内存泄漏
 
-// 定期清理过期缓存（每 10 分钟）
 setInterval(() => {
   const now = Date.now();
   for (const [key, entry] of searchCache) {
     if (now - entry.time > CACHE_TTL) searchCache.delete(key);
+  }
+  // 超出上限时删除最旧的
+  if (searchCache.size > CACHE_MAX) {
+    const oldest = [...searchCache.entries()].sort((a, b) => a[1].time - b[1].time);
+    oldest.slice(0, searchCache.size - CACHE_MAX).forEach(([k]) => searchCache.delete(k));
   }
 }, 10 * 60 * 1000);
 
@@ -147,7 +153,7 @@ function encodeUrlProperly(url) {
  * 单站搜索
  */
 async function searchSite(keyword, site) {
-  const url = site.search_url.replace('{keyword}', encodeURIComponent(keyword)).replace('{page}', '1');
+  const url = site.search_url.replace(/\{keyword\}/g, encodeURIComponent(keyword)).replace(/\{page\}/g, '1');
 
   const resp = await axios.get(url, {
     timeout: site.timeout_ms || 10000,
@@ -203,15 +209,17 @@ app.get('/api/search', async (req, res) => {
   const enabled = rules.sites.filter(s => s.enabled !== false);
   if (!enabled.length) return res.status(500).json({ error: 'No enabled sites in rules.json' });
 
-  const results = await Promise.allSettled(enabled.map(site =>
-    // ★ 每个站点独立超时，一个慢站不拖垮整体
-    Promise.race([
+  const results = await Promise.allSettled(enabled.map(site => {
+    // ★ 每站独立超时，定时器不泄漏
+    const timeout = (site.timeout_ms || 10000) + 2000;
+    let timer;
+    return Promise.race([
       searchSite(keyword, site),
-      new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('timeout')), (site.timeout_ms || 10000) + 2000)
-      ),
-    ])
-  ));
+      new Promise((_, reject) => {
+        timer = setTimeout(() => reject(new Error('timeout')), timeout);
+      }),
+    ]).finally(() => clearTimeout(timer));
+  }));
 
   const merged = [];
   results.forEach((r, i) => {
@@ -381,6 +389,7 @@ app.get('/api/m3u8', async (req, res) => {
 
     res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
     res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Cache-Control', 'no-cache'); // m3u8 不缓存（内容可能变化）
     res.send(rewritten);
   } catch (err) {
     res.status(502).json({ error: 'm3u8 fetch failed', detail: err.message });

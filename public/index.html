@@ -40,6 +40,13 @@ input,button{font-family:inherit;outline:none;border:none;background:none}
 .cd{background:var(--card);border-radius:10px;overflow:hidden;cursor:pointer;transition:all .18s;box-shadow:0 1px 6px rgba(255,182,194,.1)}
 .cd:active{transform:scale(.96)}
 .cd-img{width:100%;aspect-ratio:2/3;object-fit:cover;background:linear-gradient(135deg,#FFE0E6,#E0F0FF);display:block}
+.cd-wrap{position:relative}
+.cd-badge{
+  position:absolute;bottom:6px;left:6px;right:6px;
+  padding:3px 6px;border-radius:6px;
+  background:rgba(0,0,0,.7);font-size:9px;color:#fff;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
 .cd:nth-child(6n+1) .cd-img{border-bottom:2px solid var(--pink)}
 .cd:nth-child(6n+2) .cd-img{border-bottom:2px solid var(--mint)}
 .cd:nth-child(6n+3) .cd-img{border-bottom:2px solid var(--lavender)}
@@ -84,6 +91,21 @@ input,button{font-family:inherit;outline:none;border:none;background:none}
   text-align:center;
 }
 .hist-item:active{background:var(--pink);color:#fff;border-color:var(--pink)}
+
+/* ── 搜索建议下拉 ── */
+.suggest-dropdown{
+  position:absolute;top:100%;left:0;right:0;z-index:60;
+  background:#fff;border-radius:0 0 16px 16px;
+  box-shadow:0 8px 24px rgba(0,0,0,.08);
+  max-height:240px;overflow-y:auto;
+  border:1px solid #f0e8e4;border-top:none;display:none;
+}
+.suggest-item{
+  padding:10px 16px;font-size:13px;color:#5A5A6E;cursor:pointer;
+  border-bottom:1px solid #f8f4f2;display:flex;align-items:center;gap:8px;
+}
+.suggest-item:active{background:#FFF5F5}
+.suggest-icon{color:#C5C5D6;font-size:11px;flex-shrink:0}
 
 /* ── 安全提醒 ── */
 .warn{display:flex;align-items:center;gap:8px;padding:8px 18px;margin:8px 18px 0;border-radius:10px;background:linear-gradient(135deg,rgba(255,182,194,.15),rgba(255,218,185,.15));border:1px solid rgba(255,182,194,.25)}
@@ -213,10 +235,13 @@ $kw.addEventListener('input',()=>{
 
 const HOT_WORDS=['蜘蛛侠','哈利波特','三体','甄嬛传','你的名字','灌篮高手','流浪地球','复仇者联盟','海绵宝宝','熊出没','变形金刚','速度与激情','功夫熊猫','阿凡达','黑客帝国','西游记','三国演义','海贼王','火影忍者','龙珠'];
 
+// 缓存小写热门词，避免每次 toLowerCase
+const HOT_WORDS_LOWER=HOT_WORDS.map(w=>w.toLowerCase());
+
 function showSuggestions(q){
   const qLow=q.toLowerCase();
   const fromHistory=searchHistory.filter(h=>h.toLowerCase().includes(qLow)&&h.toLowerCase()!==qLow);
-  const fromHot=HOT_WORDS.filter(w=>w.toLowerCase().includes(qLow)&&!fromHistory.includes(w));
+  const fromHot=HOT_WORDS.filter((w,i)=>HOT_WORDS_LOWER[i].includes(qLow)&&!fromHistory.includes(w));
   const merged=[...fromHistory,...fromHot].slice(0,8);
   if(!merged.length){hideSuggestions();return;}
 
@@ -224,17 +249,18 @@ function showSuggestions(q){
   if(!box){
     box=document.createElement('div');
     box.id='suggest-box';
-    box.style.cssText='position:absolute;top:100%;left:0;right:0;z-index:60;'+
-    'background:#fff;border-radius:0 0 16px 16px;box-shadow:0 8px 24px rgba(0,0,0,.08);'+
-    'max-height:240px;overflow-y:auto;border:1px solid #f0e8e4;border-top:none;';
+    box.className='suggest-dropdown';
     document.querySelector('.srow').style.position='relative';
     document.querySelector('.srow').appendChild(box);
   }
-  box.innerHTML=merged.map(w=>
-    `<div class="suggest-item" data-kw="${esc(w)}" style="padding:10px 16px;font-size:13px;color:#5A5A6E;cursor:pointer;border-bottom:1px solid #f8f4f2;display:flex;align-items:center;gap:8px">`+
-    `<span style="color:#C5C5D6;font-size:11px">${fromHistory.includes(w)?'🕐':'🔥'}</span>`+
-    `<span>${esc(w).replace(new RegExp(`(${escRegex(esc(q))})`,'gi'),'<b style="color:#FF8FA3">$1</b>')}</span></div>`
-  ).join('');
+  const qEsc=esc(q);
+  const qRegSafe=escRegex(qEsc);
+  box.innerHTML=merged.map(w=>{
+    const wEsc=esc(w);
+    const icon=fromHistory.includes(w)?'🕐':'🔥';
+    const highlighted=wEsc.replace(new RegExp(`(${qRegSafe})`,'gi'),'<b style="color:#FF8FA3">$1</b>');
+    return `<div class="suggest-item" data-kw="${wEsc}"><span class="suggest-icon">${icon}</span><span>${highlighted}</span></div>`;
+  }).join('');
   box.style.display='block';
 }
 
@@ -323,20 +349,6 @@ document.addEventListener('visibilitychange', () => {
     }
   }
 });
-
-// ★ 页面从浏览器缓存恢复时也会触发（手机切后台回来的另一种情况）
-window.addEventListener('pageshow', (e) => {
-  if (e.persisted) syncPlayerState();
-});
-
-// 统一的状态同步函数
-function syncPlayerState(){
-  // 不在播放页但播放器实例还在 → 强制清理
-  if (state !== 'playing' && art) {
-    destroyPlayer();
-    render();
-  }
-}
 
 // ★ 定时检查器：每 500ms 检测，仅在必要时触发清理（避免重复 render）
 let _lastGuardClean=0;
@@ -613,9 +625,9 @@ function render(){
       <div class="grid">${results.map((r,i)=>{
         const pg=getProgress(r.title);
         return `<div class="cd" onclick="selectFilm(${i})">
-          <div style="position:relative">
+          <div class="cd-wrap">
             <img class="cd-img" loading="lazy" src="${esc(r.cover)||PH}" onerror="this.src='${PH}'">
-            ${pg?`<div style="position:absolute;bottom:6px;left:6px;right:6px;padding:3px 6px;border-radius:6px;background:rgba(0,0,0,.7);font-size:9px;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">▶ 继续: ${esc(pg.label||'第'+(pg.ep+1)+'集')} ${formatTime(pg.time)}</div>`:''}
+            ${pg?`<div class="cd-badge">▶ 继续: ${esc(pg.label||'第'+(pg.ep+1)+'集')} ${formatTime(pg.time)}</div>`:''}
           </div>
           <div class="cd-bd"><div class="cd-t">${esc(r.title)}</div><div class="cd-m">${esc(r.snippet||r.year||r.site)}</div></div>
         </div>`}).join('')}</div>`;
