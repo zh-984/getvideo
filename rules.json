@@ -27,19 +27,6 @@
       "timeout_ms": 10000
     },
     {
-      "site_name": "非凡资源",
-      "enabled": true,
-      "mode": "api",
-      "base_url": "https://api.ffzyapi.com",
-      "search_url": "https://api.ffzyapi.com/api.php/provide/vod/?ac=detail&wd={keyword}&pg={page}",
-      "list_selector": null,
-      "title_selector": null,
-      "link_selector": null,
-      "cover_field": "vod_pic",
-      "video_url_regex": null,
-      "timeout_ms": 10000
-    },
-    {
       "site_name": "iKun资源",
       "enabled": true,
       "mode": "api",
@@ -53,11 +40,50 @@
       "timeout_ms": 10000
     },
     {
+      "site_name": "iKun资源2",
+      "enabled": true,
+      "mode": "api",
+      "base_url": "https://ikunzy.org",
+      "search_url": "https://ikunzy.org/api.php/provide/vod/?ac=detail&wd={keyword}&pg={page}",
+      "list_selector": null,
+      "title_selector": null,
+      "link_selector": null,
+      "cover_field": "vod_pic",
+      "video_url_regex": null,
+      "timeout_ms": 10000
+    },
+    {
       "site_name": "素材采集",
       "enabled": true,
       "mode": "api",
       "base_url": "https://subocaiji.com",
       "search_url": "https://subocaiji.com/api.php/provide/vod/?ac=detail&wd={keyword}&pg={page}",
+      "list_selector": null,
+      "title_selector": null,
+      "link_selector": null,
+      "cover_field": "vod_pic",
+      "video_url_regex": null,
+      "timeout_ms": 10000
+    },
+    {
+      "site_name": "非凡资源",
+      "enabled": true,
+      "mode": "api",
+      "base_url": "https://api.ffzyapi.com",
+      "search_url": "https://api.ffzyapi.com/api.php/provide/vod/?ac=detail&wd={keyword}&pg={page}",
+      "list_selector": null,
+      "title_selector": null,
+      "link_selector": null,
+      "cover_field": "vod_pic",
+      "video_url_regex": null,
+      "timeout_ms": 10000
+    },
+    {
+      "site_name": "量子资源",
+      "enabled": true,
+      "mode": "api",
+      "base_url": "https://cj.lziapi.com",
+      "search_url": "https://cj.lziapi.com/api.php/provide/vod/?ac=detail&wd={keyword}&pg={page}",
       "list_selector": null,
       "title_selector": null,
       "link_selector": null,
