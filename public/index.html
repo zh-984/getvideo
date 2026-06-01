@@ -66,11 +66,15 @@ input,button{font-family:inherit;outline:none;border:none;background:none}
 
 /* ── 搜索历史 ── */
 .hist{margin:20px 24px 0;text-align:center}
-.hist-head{display:flex;justify-content:center;align-items:center;gap:12px;margin-bottom:8px}
+.hist-head{display:flex;justify-content:center;align-items:center;gap:12px;margin-bottom:10px}
 .hist-head span:first-child{font-size:12px;font-weight:600;color:var(--text2)}
 .hist-clear{font-size:11px;color:var(--text3);cursor:pointer;padding:2px 8px;border-radius:10px;background:var(--card);border:1px solid var(--border)}
 .hist-clear:active{background:var(--pink);color:#fff;border-color:var(--pink)}
-.hist-list{display:flex;flex-wrap:wrap;gap:8px}
+.hist-list{
+  display:flex;flex-wrap:wrap;justify-content:center;gap:8px;
+  overflow:hidden;max-height:64px;
+}
+@media(max-width:768px){.hist-list{max-height:64px}}
 .hist-item{
   padding:5px 14px;border-radius:16px;font-size:11px;font-weight:500;
   background:var(--card);color:var(--text2);cursor:pointer;
@@ -458,7 +462,7 @@ function render(){
       <span class="tag" onclick="hot(this)">你的名字</span><span class="tag" onclick="hot(this)">灌篮高手</span>
       <span class="tag" onclick="hot(this)">流浪地球</span><span class="tag" onclick="hot(this)">复仇者联盟</span>
     </div>
-    ${searchHistory.length?`<div class="hist"><div class="hist-head"><span>🕐 搜索历史</span><span class="hist-clear" onclick="clearHistory()">清空</span></div><div class="hist-list">${searchHistory.map(kw=>`<span class="hist-item" data-kw="${esc(kw)}">${esc(kw)}</span>`).join('')}</div></div>`:''}
+    ${searchHistory.length?`<div class="hist"><div class="hist-head"><span>🕐 搜索历史</span><span class="hist-clear" onclick="clearHistory()">清空</span></div><div class="hist-list">${searchHistory.slice(0,window.innerWidth>768?16:8).map(kw=>`<span class="hist-item" data-kw="${esc(kw)}">${esc(kw)}</span>`).join('')}</div></div>`:''}
     </div>
     ${recs.length?`<div class="rec-section">
       <div class="rec-title">🎬 推荐</div>
