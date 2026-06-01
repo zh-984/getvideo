@@ -8,8 +8,26 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#FFF8F6">
 <title>GetVideo</title>
-<script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.7/dist/hls.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/artplayer@5.1.1/dist/artplayer.min.js"></script>
+<!-- ★ 延迟加载播放器库：首屏不需要，搜索选片后才用 -->
+<script>
+  // 预加载但不阻塞渲染
+  function loadScript(src){
+    return new Promise((resolve,reject)=>{
+      const s=document.createElement('script');
+      s.src=src;s.onload=resolve;s.onerror=reject;
+      document.head.appendChild(s);
+    });
+  }
+  async function ensurePlayerLibs(){
+    if(window.Hls&&window.Artplayer)return;
+    await Promise.all([
+      loadScript('https://cdn.jsdelivr.net/npm/hls.js@1.5.7/dist/hls.min.js'),
+      loadScript('https://cdn.jsdelivr.net/npm/artplayer@5.1.1/dist/artplayer.min.js'),
+    ]);
+  }
+  // 页面加载完后预取（不阻塞首屏）
+  setTimeout(()=>ensurePlayerLibs(),2000);
+</script>
 
 <!-- Google Fonts 改为 display=swap 不阻塞渲染，国内备选镜像 -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -235,6 +253,10 @@ function bindProgressSave(){
   });
 }
 const $app=document.getElementById('app'), $kw=document.getElementById('kw'), $sbtn=document.getElementById('sbtn');
+
+// ★ 前端搜索缓存：相同关键词 3 分钟内不重复请求
+const _searchCache=new Map();
+const _CACHE_MS=3*60*1000;
 $kw.addEventListener('keyup',e=>{
   if(e.key==='Enter'){hideSuggestions();doSearch();}
 });
@@ -388,15 +410,27 @@ let _resumeTimer=null;
 // ── 搜索 ──
 async function doSearch(){
   const kw=$kw.value.trim(); if(!kw)return;
-  if($sbtn.disabled)return; // 防重复点击
+  if($sbtn.disabled)return;
   saveHistory(kw);
-  pushPage('results');  // 记录历史，让返回键能回来
+  pushPage('results');
+
+  // ★ 检查前端缓存
+  const cacheKey=kw.toLowerCase();
+  const cached=_searchCache.get(cacheKey);
+  if(cached&&Date.now()-cached.t<_CACHE_MS){
+    results=cached.d; state='results';
+    log('ok',`${results.length} 条结果 (缓存)`);
+    $sbtn.disabled=false; $sbtn.textContent='搜索'; render();
+    return;
+  }
+
   $sbtn.disabled=true; $sbtn.textContent='…'; state='searching'; render();
   try{
     const r=await fetch(`${API}/api/search?keyword=${encodeURIComponent(kw)}`);
     if(!r.ok)throw new Error(`HTTP ${r.status}`);
     const d=await r.json();
     results=d.results||[];
+    _searchCache.set(cacheKey,{d:results,t:Date.now()});
     state='results'; log('ok',`${results.length} 条结果`);
   }catch(e){log('err','搜索: '+e.message); state='results'; results=[]}
   finally{$sbtn.disabled=false; $sbtn.textContent='搜索'; render()}
@@ -538,7 +572,8 @@ function fallbackFromError(){
 }
 
 // ── ArtPlayer + hls.js ──
-function initPlayer(source){
+async function initPlayer(source){
+  await ensurePlayerLibs(); // 确保播放器库已加载
   destroyPlayer();
   const box=document.getElementById('player-box'); if(!box)return;
 

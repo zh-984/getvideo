@@ -14,19 +14,51 @@ const axios   = require('axios');
 const cors    = require('cors');
 const fs      = require('fs');
 const { URL } = require('url');
+const zlib    = require('zlib');
 
 const app  = express();
 const PORT = process.env.PORT || 3000;
-app.set('trust proxy', 1); // 反向代理后正确获取客户端 IP
+app.set('trust proxy', 1);
 
 // ── 中间件 ──
 app.use(cors());
 app.use(express.json());
-app.use(express.static(path.join(__dirname, 'public')));
-app.use((req, _res, next) => {
+
+// ★ Gzip 压缩：搜索 JSON 50KB → ~10KB，m3u8 文本 5KB → ~1KB
+app.use((req, res, next) => {
+  const accept = req.headers['accept-encoding'] || '';
+  if (accept.includes('gzip')) {
+    const origSend = res.send.bind(res);
+    res.send = (body) => {
+      if (typeof body === 'string' || Buffer.isBuffer(body)) {
+        zlib.gzip(body, (err, compressed) => {
+          if (err) return origSend(body);
+          res.setHeader('Content-Encoding', 'gzip');
+          res.setHeader('Vary', 'Accept-Encoding');
+          res.removeHeader('Content-Length');
+          origSend(compressed);
+        });
+      } else {
+        origSend(body);
+      }
+    };
+  }
+  next();
+});
+
+// ★ 静态文件缓存：hls.js / ArtPlayer 等 CDN 资源本地缓存 1 小时
+app.use(express.static(path.join(__dirname, 'public'), {
+  maxAge: '1h',
+  etag: true,
+  lastModified: true,
+}));
+// 请求日志 + Keep-Alive
+app.use((req, res, _next) => {
   req._rid = Math.random().toString(36).slice(2, 8);
   console.log(`[${new Date().toISOString()}][${req._rid}] ${req.method} ${req.url}`);
-  next();
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('Keep-Alive', 'timeout=5, max=100');
+  _next();
 });
 
 
