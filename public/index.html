@@ -39,7 +39,7 @@ input,button{font-family:inherit;outline:none;border:none;background:none}
 @media(max-width:400px){.grid{grid-template-columns:repeat(3,1fr);gap:8px}}
 .cd{background:var(--card);border-radius:10px;overflow:hidden;cursor:pointer;transition:all .18s;box-shadow:0 1px 6px rgba(255,182,194,.1)}
 .cd:active{transform:scale(.96)}
-.cd-img{width:100%;aspect-ratio:2/3;object-fit:cover;background:#FFF0F0;display:block}
+.cd-img{width:100%;aspect-ratio:2/3;object-fit:cover;background:linear-gradient(135deg,#FFE0E6,#E0F0FF);display:block}
 .cd:nth-child(6n+1) .cd-img{border-bottom:2px solid var(--pink)}
 .cd:nth-child(6n+2) .cd-img{border-bottom:2px solid var(--mint)}
 .cd:nth-child(6n+3) .cd-img{border-bottom:2px solid var(--lavender)}
@@ -173,6 +173,15 @@ let searchHistory=JSON.parse(localStorage.getItem('gv_history')||'[]');
 const $app=document.getElementById('app'), $kw=document.getElementById('kw'), $sbtn=document.getElementById('sbtn');
 $kw.addEventListener('keyup',e=>{if(e.key==='Enter')doSearch()});
 
+// ★ 搜索防抖：输入时 300ms 内不触发（避免误触）
+let _searchTimer=null;
+$kw.addEventListener('input',()=>{
+  clearTimeout(_searchTimer);
+  _searchTimer=setTimeout(()=>{
+    if($kw.value.trim().length>=2) doSearch();
+  },300);
+});
+
 // 事件委托：历史标签点击
 $app.addEventListener('click', (e) => {
   const item = e.target.closest('.hist-item');
@@ -273,6 +282,7 @@ setInterval(() => {
 // ── 搜索 ──
 async function doSearch(){
   const kw=$kw.value.trim(); if(!kw)return;
+  if($sbtn.disabled)return; // 防重复点击
   saveHistory(kw);
   pushPage('results');  // 记录历史，让返回键能回来
   $sbtn.disabled=true; $sbtn.textContent='…'; state='searching'; render();

@@ -66,11 +66,23 @@ function validateUrl(targetUrl) {
 
 
 // ══════════════════════════════════════
-//  § 1.  规则加载
+//  § 1.  规则加载 + 搜索缓存
 // ══════════════════════════════════════
 
 const RULE_PATH = path.join(__dirname, 'rules.json');
 let rules = { sites: [] };
+
+// ★ 搜索结果缓存：相同关键词 5 分钟内直接返回缓存，减少资源站请求
+const searchCache = new Map();
+const CACHE_TTL = 5 * 60 * 1000; // 5 分钟
+
+// 定期清理过期缓存（每 10 分钟）
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, entry] of searchCache) {
+    if (now - entry.time > CACHE_TTL) searchCache.delete(key);
+  }
+}, 10 * 60 * 1000);
 
 function loadRules() {
   try {
@@ -179,6 +191,14 @@ async function searchSite(keyword, site) {
 app.get('/api/search', async (req, res) => {
   const keyword = (req.query.keyword || '').trim();
   if (!keyword) return res.status(400).json({ error: 'Missing keyword' });
+  const force = req.query.force === '1';
+
+  // ★ 检查缓存
+  const cacheKey = keyword.toLowerCase();
+  const cached = searchCache.get(cacheKey);
+  if (!force && cached && Date.now() - cached.time < CACHE_TTL) {
+    return res.json({ ...cached.data, cached: true });
+  }
 
   const enabled = rules.sites.filter(s => s.enabled !== false);
   if (!enabled.length) return res.status(500).json({ error: 'No enabled sites in rules.json' });
@@ -194,7 +214,9 @@ app.get('/api/search', async (req, res) => {
     }
   });
 
-  res.json({ keyword, total: merged.length, results: merged });
+  const data = { keyword, total: merged.length, results: merged };
+  searchCache.set(cacheKey, { data, time: Date.now() });
+  res.json(data);
 });
 
 
