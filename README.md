@@ -1,132 +1,88 @@
-# GetVideo
+# GetVideo v4.3
 
-规则解耦影视聚合搜索与 H5 播放器 — 零流量穿透 + no-referrer 破防盗链
+规则解耦影视聚合搜索与 H5 播放器 — **媒体直连 CDN + `no-referrer` + 并发体检选优**
 
-## 功能特性
+## 核心特性
 
-- **聚合搜索**：7 个资源站并发搜索，去重排序，搜索结果缓存
-- **零流量穿透**：服务器只转发 m3u8 文本（几 KB），视频 .ts 分片从 CDN 直连浏览器
-- **规则解耦**：所有站点配置在 `rules.json`，主程序零硬编码，热更新无需重启
-- **马卡龙色系 H5 播放器**：ArtPlayer + hls.js，支持倍速、全屏、选集、画质切换
-- **智能降级**：直连失败 → 自动切源 → 全代理模式（50MB 熔断保护）
-- **搜索建议**：输入时联想历史记录 + 热门词
-- **播放进度记忆**：自动保存，下次打开自动续播
-- **预取下一集**：当前播放时静默预取下一集 m3u8，切集秒播
-- **站点健康检测**：自动追踪每个站的成功/失败，连续失败自动跳过
-- **安全防护**：SSRF 防护、频率限制、文件类型拦截、URL 校验、Gzip 压缩
+- **媒体直连 CDN**：视频、音频及初始化分片均由浏览器直连 CDN。播放代理只转发 m3u8 清单和 16 字节 AES 密钥，能否直连取决于片源 CDN 的访问规则
+- **多站并发聚合 & 智能换源**：聚合 10 个支持跨域直连的资源站，同名影片按「片名+分类」合并为多条可选线路；自动按相关性打分并过滤无关短剧/解说/赛事/违规噪点；播放失败自动秒切下一条直连线路
+- **并发链路体检选优**：多源影片开播前并发检查清单、画质和 CORS；直链视频和分片只请求 HEAD 响应头，确认失效的线路会被跳过，待验证线路仍可由浏览器尝试直连
+- **嵌套 Master Playlist 递归重写**：完整支持多码率 `EXT-X-STREAM-INF` 与多音轨子 m3u8
+- **现代观影体验**：浅色马卡龙 / 深色观影双主题、首页「继续观看」+「最新更新（分类筛选）」、自动连播、选集正/倒序、倍速、PC 键盘快捷键
+- **深度安全防护**：DNS 解析 + 逐跳重定向 SSRF 防护（拦截私网、IPv6 映射及云主机元数据 `169.254.169.254`）、分级限流、Content-Type 拦截、热重载鉴权
 
-## 快速开始
+---
 
-```bash
-# 安装依赖
-npm install
+## 部署环境
 
-# 启动
-npm start
+| 项目 | 值 |
+|------|-----|
+| 服务器 | Ubuntu 22.04 或相容环境 |
+| 运行环境 | Node.js 20.18.1 或更高版本 |
+| 进程管理 | `systemd` (`getvideo.service`，开机自启、崩溃重启、`MemoryMax=256M`) |
+| 反向代理示例 | Nginx 将 `location /` 转发至 `127.0.0.1:3000` |
 
-# 打开浏览器
-# http://localhost:3000
-```
+---
 
-## 项目结构
-
-```
-Getvideo/
-├── server.js          ← 后端（Express + 搜索 + m3u8 代理 + 安全防护）
-├── rules.json         ← 资源站规则（添加/禁用站点只改这里）
-├── public/
-│   └── index.html     ← H5 播放器（马卡龙色系 + no-referrer）
-├── package.json
-├── deploy.sh          ← 服务器一键部署脚本
-├── .env.example       ← 配置模板
-├── LICENSE            ← MIT
-└── README.md
-```
-
-## 接口文档
+## 后端接口
 
 | 接口 | 说明 |
 |------|------|
-| `GET /api/search?keyword=xxx` | 聚合搜索（支持缓存） |
-| `GET /api/m3u8?url=xxx` | m3u8 代理（节流模式，.ts 直连 CDN） |
-| `GET /api/m3u8?url=xxx&full=1` | m3u8 代理（全代理模式，50MB 熔断） |
-| `GET /api/key?url=xxx` | AES 密钥代理（16 字节） |
-| `GET /api/ts?url=xxx` | .ts 分片代理（全代理模式用） |
-| `GET /api/parse?url=xxx` | m3u8 解析 + URL 重写 |
-| `GET /api/sites` | 已配置站点列表 |
-| `GET /api/info` | 服务器状态 + 站点健康 |
-| `POST /api/rules/reload` | 热更新规则文件 |
+| `GET /api/search?keyword=xxx` | 聚合搜索（相关性打分 + 噪点过滤，5 分钟缓存） |
+| `GET /api/latest` | 各站最新更新聚合（15 分钟缓存，支持分类筛选） |
+| `POST /api/probe` | 并发线路体检（存活、延迟、画质、CORS 直连检测） |
+| `GET /api/m3u8?url=xxx` | m3u8 递归重写（清单上限 4 MiB，媒体分片直连 CDN） |
+| `GET /api/key?url=xxx` | HLS AES 密钥代理（仅接受 16 字节密钥） |
+| `GET /api/parse?url=xxx` | m3u8 解析与重写调试接口 |
+| `GET /api/info` | 服务版本、内存占用与站点健康状态 |
+| `POST /api/rules/reload` | 热更新 `rules.json`（仅允许本机回环或携带 `Authorization: Bearer <ADMIN_TOKEN>`） |
 
-## 规则配置
+---
 
-编辑 `rules.json`，CMS API 模式示例：
+## 本地开发
 
-```json
-{
-  "site_name": "站点名称",
-  "enabled": true,
-  "mode": "api",
-  "base_url": "https://example.com",
-  "search_url": "https://example.com/api.php/provide/vod/?ac=detail&wd={keyword}&pg={page}",
-  "timeout_ms": 10000
-}
+```powershell
+cd getvideo
+npm ci
+npm start
+# 浏览器打开 http://localhost:3000
 ```
 
-大部分免费影视站使用同一套 CMS 后台，API 格式相同。
+---
 
-## 零流量穿透原理
-
-```
-搜索：浏览器 → 服务器（几 KB JSON）→ 资源站 API → 返回影片列表
-播放：浏览器 → 服务器（m3u8 文本几 KB）→ 重写 URL
-       ↓
-       hls.js 直连 CDN 拉取 .ts 分片（不经过服务器）
-       ↓
-       AES 密钥通过服务器代理（绕防盗链，16 字节）
-```
-
-服务器每部电影只消耗 **几 KB** 流量。
-
-## 播放降级策略
-
-```
-直连失败 → 自动切下一集 → 全代理模式（50MB 熔断）→ 提示用户
-```
-
-## 部署
+## 部署到服务器
 
 ```bash
-# 上传项目
-scp -r . ubuntu@your-server:/home/ubuntu/getvideo/
-
-# SSH 登录
-ssh ubuntu@your-server
-
-# 安装 + 启动
-cd /home/ubuntu/getvideo
-npm install --production
-npm install -g pm2
-pm2 start server.js --name getvideo
-pm2 save
-pm2 startup
+git clone https://github.com/zh-984/getvideo.git
+cd getvideo
+cp .env.example .env
+APP_DIR="$PWD" bash deploy.sh
 ```
 
-## 技术栈
+更新已有的 Git 部署时，在服务器的项目目录中执行以下命令。
 
-- **后端**：Node.js + Express + Axios + Cheerio
-- **前端**：原生 HTML/CSS/JS + ArtPlayer + hls.js
-- **协议**：HLS (m3u8) + AES-128
+```bash
+git pull --ff-only
+npm ci --omit=dev
+sudo systemctl restart getvideo
+```
 
-## 安全防护
+---
 
-- SSRF 防护（禁止访问内网）
-- 文件类型拦截（.exe/.bat/.sh 等）
-- Content-Type 白名单（仅视频/音频/m3u8）
-- 脚本注入检测
-- 频率限制（每 IP 每秒 20 次）
-- URL 长度限制（2048 字符）
-- 站点健康检测（连续失败自动跳过）
+## 常用运维命令
 
-## License
+```bash
+# 查看状态 / 重启 / 停止
+sudo systemctl status getvideo
+sudo systemctl restart getvideo
+sudo systemctl stop getvideo
 
-[MIT](LICENSE)
+# 查看实时日志
+sudo journalctl -u getvideo -f
+
+# 热重载 rules.json（无需重启服务）
+curl -X POST http://127.0.0.1:3000/api/rules/reload
+
+# 查看站点健康状态
+curl -s http://127.0.0.1:3000/api/info
+```
